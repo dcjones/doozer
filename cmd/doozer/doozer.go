@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/soundcloud/doozer"
+	"github.com/dcjones/doozer"
 	"os"
 	"reflect"
 	"sort"

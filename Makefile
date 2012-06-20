@@ -1,6 +1,6 @@
 include Make.inc
 
-TARG=github.com/soundcloud/doozer
+TARG=github.com/dcjones/doozer
 GOFILES=\
 	conn.go\
 	err.go\

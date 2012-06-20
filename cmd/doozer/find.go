@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/soundcloud/doozer"
+	"github.com/dcjones/doozer"
 	"os"
 )
 
