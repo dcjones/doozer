@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 )
 
 var (
@@ -40,10 +41,26 @@ type Conn struct {
 
 // Dial connects to a single doozer server.
 func Dial(addr string) (*Conn, error) {
+	return dial(addr, func(addr string) (net.Conn, error) {
+		return net.Dial("tcp", addr)
+	})
+}
+
+func DialTimeout(addr string, timeout time.Duration) (*Conn, error) {
+	return dial(addr, func(addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout("tcp", addr, timeout)
+		if err == nil {
+			conn.
+		}
+	})
+}
+
+func dial(addr string,
+	net_dial func(addr string) (net.Conn, error)) (*Conn, error) {
 	var c Conn
 	var err error
 	c.addr = addr
-	c.conn, err = net.Dial("tcp", addr)
+	c.conn, err = net_dial(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +78,8 @@ func Dial(addr string) (*Conn, error) {
 // DialUri connects to one of the doozer servers given in `uri`. If `uri`
 // contains a cluster name, it will lookup addrs to try in `buri`.  If `uri`
 // contains a  secret key, then DialUri will call `Access` with the secret.
-func DialUri(uri, buri string) (*Conn, error) {
+func dialUri(uri, buri string,
+	net_dial func(addr string) (net.Conn, error)) (*Conn, error) {
 	if !strings.HasPrefix(uri, uriPrefix) {
 		return nil, ErrInvalidUri
 	}
@@ -76,7 +94,7 @@ func DialUri(uri, buri string) (*Conn, error) {
 
 	name, ok := p["cn"]
 	if ok && buri != "" {
-		c, err := DialUri(buri, "")
+		c, err := dialUri(buri, "", net_dial)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +111,7 @@ func DialUri(uri, buri string) (*Conn, error) {
 		}
 	}
 
-	c, err := Dial(addrs[rand.Int()%len(addrs)])
+	c, err := dial(addrs[rand.Int()%len(addrs)], net_dial)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +126,18 @@ func DialUri(uri, buri string) (*Conn, error) {
 	}
 
 	return c, nil
+}
+
+func DialUri(uri, buri string) (*Conn, error) {
+	return dialUri(uri, buri, func(addr string) (net.Conn, error) {
+		return net.Dial("tcp", addr)
+	})
+}
+
+func DialUriTimetout(uri, buri string, timeout time.Duration) (*Conn, error) {
+	return dialUri(uri, buri, func(addr string) (net.Conn, error) {
+		return net.DialTimeout("tcp", addr, timeout)
+	})
 }
 
 // Find possible addresses for cluster named name.
