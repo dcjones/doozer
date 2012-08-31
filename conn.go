@@ -37,27 +37,23 @@ type Conn struct {
 	err     error
 	stop    chan bool
 	stopped chan bool
+	timeout time.Duration
 }
 
 // Dial connects to a single doozer server.
 func Dial(addr string) (*Conn, error) {
-	return dial(addr, func(addr string) (net.Conn, error) {
-		return net.Dial("tcp", addr)
-	})
+	return DialTimeout(addr, 0)
 }
 
 func DialTimeout(addr string, timeout time.Duration) (*Conn, error) {
-	return dial(addr, func(addr string) (net.Conn, error) {
-		return net.DialTimeout("tcp", addr, timeout)
-	})
-}
-
-func dial(addr string,
-	net_dial func(addr string) (net.Conn, error)) (*Conn, error) {
 	var c Conn
 	var err error
 	c.addr = addr
-	c.conn, err = net_dial(addr)
+	if timeout > 0 {
+		c.conn, err = net.DialTimeout("tcp", addr, timeout)
+	} else {
+		c.conn, err = net.Dial("tcp", addr)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +62,7 @@ func dial(addr string,
 	c.msg = make(chan []byte)
 	c.stop = make(chan bool, 1)
 	c.stopped = make(chan bool)
+	c.timeout = timeout
 	errch := make(chan error, 1)
 	go c.mux(errch)
 	go c.readAll(errch)
@@ -75,8 +72,7 @@ func dial(addr string,
 // DialUri connects to one of the doozer servers given in `uri`. If `uri`
 // contains a cluster name, it will lookup addrs to try in `buri`.  If `uri`
 // contains a  secret key, then DialUri will call `Access` with the secret.
-func dialUri(uri, buri string,
-	net_dial func(addr string) (net.Conn, error)) (*Conn, error) {
+func DialUriTimeout(uri, buri string, timeout time.Duration) (*Conn, error) {
 	if !strings.HasPrefix(uri, uriPrefix) {
 		return nil, ErrInvalidUri
 	}
@@ -91,7 +87,7 @@ func dialUri(uri, buri string,
 
 	name, ok := p["cn"]
 	if ok && buri != "" {
-		c, err := dialUri(buri, "", net_dial)
+		c, err := DialUriTimeout(buri, "", timeout)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +104,7 @@ func dialUri(uri, buri string,
 		}
 	}
 
-	c, err := dial(addrs[rand.Int()%len(addrs)], net_dial)
+	c, err := DialTimeout(addrs[rand.Int()%len(addrs)], timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -126,15 +122,7 @@ func dialUri(uri, buri string,
 }
 
 func DialUri(uri, buri string) (*Conn, error) {
-	return dialUri(uri, buri, func(addr string) (net.Conn, error) {
-		return net.Dial("tcp", addr)
-	})
-}
-
-func DialUriTimetout(uri, buri string, timeout time.Duration) (*Conn, error) {
-	return dialUri(uri, buri, func(addr string) (net.Conn, error) {
-		return net.DialTimeout("tcp", addr, timeout)
-	})
+	return DialUriTimeout(uri, buri, 0)
 }
 
 // Find possible addresses for cluster named name.
@@ -271,6 +259,10 @@ func (c *Conn) readAll(errch chan error) {
 }
 
 func (c *Conn) read() ([]byte, error) {
+	if c.timeout > 0 {
+		c.conn.SetReadDeadline(time.Now().Add(c.timeout))
+	}
+
 	var size int32
 	err := binary.Read(c.conn, binary.BigEndian, &size)
 	if err != nil {
@@ -287,6 +279,10 @@ func (c *Conn) read() ([]byte, error) {
 }
 
 func (c *Conn) write(buf []byte) error {
+	if c.timeout > 0 {
+		c.conn.SetWriteDeadline(time.Now().Add(c.timeout))
+	}
+
 	err := binary.Write(c.conn, binary.BigEndian, int32(len(buf)))
 	if err != nil {
 		return err
