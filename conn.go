@@ -48,10 +48,7 @@ func Dial(addr string) (*Conn, error) {
 
 func DialTimeout(addr string, timeout time.Duration) (*Conn, error) {
 	return dial(addr, func(addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout("tcp", addr, timeout)
-		if err == nil {
-			conn.
-		}
+		return net.DialTimeout("tcp", addr, timeout)
 	})
 }
 
